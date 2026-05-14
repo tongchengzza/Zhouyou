@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "xiaohongshu": {
+      "command": "python3",
+      "args": ["/home/admin123/drama_calendar/xhs_mcp.py"]
+    }
+  }
+}

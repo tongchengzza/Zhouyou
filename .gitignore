@@ -1,0 +1,19 @@
+# 敏感
+小红书Cookie.txt
+
+# 输出物 / 中间产物
+poster_*.jpg
+*_追剧日历*.png
+image*.png
+image copy*.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
