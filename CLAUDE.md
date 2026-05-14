@@ -109,14 +109,24 @@ python3 /home/admin123/drama_calendar/drama_calendar.py
 
 项目配置了专用 MCP 服务器（`xhs_mcp.py`），提供两个工具：
 
-### `search_xiaohongshu` — 查询数据
+### `search_xiaohongshu_playwright` — 查询数据【推荐，仅家用机器可用】
 ```
 keyword: "{剧名} 追剧日历 VIP SVIP 更新"
 keyword: "{剧名} VIP 几集 更新时间"
 ```
+- 用 Playwright 真实浏览器 + 住宅 IP 搜，比 WebSearch 准
 - 返回标题、作者、点赞数和笔记链接
 - **优先点赞数高的博主笔记**，实测准确率高
-- ⚠️ 当前服务器为机房 IP，小红书 API 会拦截。改用 WebSearch：
+- ⚠️ 必须部署在家庭住宅网络环境，机房 IP 一样会被风控
+
+### `search_xiaohongshu` — 查询数据【fallback】
+```
+keyword: "{剧名} 追剧日历 VIP SVIP 更新"
+keyword: "{剧名} VIP 几集 更新时间"
+```
+- 基于 xhs Python 库的 HTTP API + 本地签名
+- ⚠️ 当前 DMIT 机房 IP 下被小红书风控拦截，返回 300011 错误
+- 仅在 Playwright 工具不可用时退而求其次，或仍走 WebSearch：
   ```
   搜索关键词：小红书 {剧名} VIP追剧日历 site:xiaohongshu.com
   或：{剧名} VIP SVIP 更新集数 小红书博主
@@ -168,3 +178,59 @@ image_paths: ["/home/admin123/drama_calendar/{剧名}_追剧日历_1.png", ...]
 dbku.tv 搜剧名 → 看已上线集数 → 对照 schedule 里的集数是否一致
 欧乐影院 搜剧名 → 交叉确认 SVIP 当前最新集号
 ```
+
+---
+
+## 家用机器部署指南（Playwright 搜索专用）
+
+`search_xiaohongshu_playwright` 工具必须部署在家庭住宅网络环境，否则 IP 仍会被风控（DMIT 上跑也会报 300011）。
+
+### 一次性安装
+
+```bash
+# 1. clone 项目（不带 cookie 和大文件，cookie 单独拷）
+git clone <仓库地址> ~/drama_calendar
+cd ~/drama_calendar
+git submodule update --init --recursive
+# submodule 已锁 commit f328ee35，不需要再 checkout
+
+# 2. 装 Python 依赖（最小集，已绕过 MediaCrawler 重依赖）
+pip install --user playwright httpx parsel PyExecJS tenacity pyhumps xhshow
+
+# 3. 装 Chromium 浏览器和 Linux 系统库
+python3 -m playwright install chromium
+sudo python3 -m playwright install-deps chromium   # Linux 需要，Mac 不需要
+
+# 4. 把 小红书Cookie.txt 拷到项目根（不进 git）
+cp /path/to/your/小红书Cookie.txt ./
+
+# 5. 验证出口 IP 是住宅
+curl -s ipinfo.io | grep -E '"ip"|"org"'
+# org 不能是 DMIT/AWS/Alibaba/Tencent 等机房 ASN，必须是住宅 ISP
+
+# 6. 烟雾测试
+python3 xhs_playwright.py "低智商犯罪 VIP" 3
+# 期望：JSON 数组，≥1 条结果
+```
+
+### MCP 注册
+
+家用机器上 `.claude/settings.json` 路径要改成本地的，比如：
+```json
+{
+  "mcpServers": {
+    "xiaohongshu": {
+      "command": "python3",
+      "args": ["/home/你的用户名/drama_calendar/xhs_mcp.py"]
+    }
+  }
+}
+```
+
+### Cookie 失效时
+
+跟原来一样，浏览器 F12 复制 cookie 字符串覆盖 `小红书Cookie.txt`。
+
+### License 说明
+
+`vendor/MediaCrawler/` 采用「非商业学习使用许可证」，本项目当前作为个人追剧群引流的学习用途。如未来涉及商业化，需重新评估合规性。
