@@ -1,9 +1,12 @@
 """小红书 MCP 服务器 — 供 drama_calendar 查询剧情数据 & 发布日历图"""
+import asyncio
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 from xhs import XhsClient
 from xhs.help import sign
+
+import xhs_playwright
 
 COOKIE_FILE = Path(__file__).parent / "小红书Cookie.txt"
 
@@ -66,6 +69,30 @@ def search_xiaohongshu(keyword: str, page_size: int = 8) -> str:
                 "替代方案：用 WebSearch 工具搜「小红书 {剧名} VIP 追剧日历」"
             )
         return f"搜索失败: {msg}"
+
+
+@mcp.tool()
+def search_xiaohongshu_playwright(keyword: str, page_size: int = 8) -> str:
+    """[推荐] 用 Playwright 真实浏览器搜索小红书，绕过机房 IP 风控。
+
+    需要部署在家庭住宅网络的机器上才有效。比 search_xiaohongshu 权重更高、覆盖更全。
+
+    Args:
+        keyword: 搜索关键词，如「低智商犯罪 追剧日历 VIP」
+        page_size: 返回条数，默认 8
+    """
+    result = asyncio.run(xhs_playwright.search(keyword, page_size))
+    if isinstance(result, str):
+        return result
+    if not result:
+        return f"未找到「{keyword}」相关笔记。"
+
+    lines = [f"小红书 Playwright 搜索「{keyword}」，共 {len(result)} 条：\n"]
+    for i, row in enumerate(result, 1):
+        lines.append(f"{i}. 【{row['title']}】 作者:{row['author']} 点赞:{row['likes']}")
+        if row["url"]:
+            lines.append(f"   {row['url']}")
+    return "\n".join(lines)
 
 
 @mcp.tool()
