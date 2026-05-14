@@ -34,5 +34,53 @@ class ParseCookieTest(unittest.TestCase):
             _parse_cookie("   ")
 
 
+class FormatTest(unittest.TestCase):
+    def test_extracts_fields_from_api_response(self):
+        from xhs_playwright import _format
+
+        api_response = {
+            "items": [
+                {
+                    "id": "abc123",
+                    "note_card": {
+                        "display_title": "低智商犯罪 VIP 更新日历",
+                        "user": {"nickname": "追剧博主小红"},
+                        "interact_info": {"liked_count": "1.2万"},
+                    },
+                },
+                {
+                    "note_id": "def456",
+                    "title": "fallback 标题字段",
+                    "user": {"nickname": "另一个博主"},
+                    "interact_info": {"liked_count": "234"},
+                },
+            ]
+        }
+        rows = _format(api_response)
+        self.assertEqual(len(rows), 2)
+
+        self.assertEqual(rows[0]["title"], "低智商犯罪 VIP 更新日历")
+        self.assertEqual(rows[0]["author"], "追剧博主小红")
+        self.assertEqual(rows[0]["likes"], "1.2万")
+        self.assertEqual(rows[0]["url"], "https://www.xiaohongshu.com/explore/abc123")
+
+        self.assertEqual(rows[1]["title"], "fallback 标题字段")
+        self.assertEqual(rows[1]["url"], "https://www.xiaohongshu.com/explore/def456")
+
+    def test_empty_items(self):
+        from xhs_playwright import _format
+        self.assertEqual(_format({"items": []}), [])
+        self.assertEqual(_format({}), [])
+        self.assertEqual(_format(None), [])
+
+    def test_missing_optional_fields(self):
+        from xhs_playwright import _format
+        api_response = {"items": [{"id": "x", "note_card": {}}]}
+        rows = _format(api_response)
+        self.assertEqual(rows[0]["title"], "（无标题）")
+        self.assertEqual(rows[0]["author"], "未知")
+        self.assertEqual(rows[0]["likes"], "?")
+
+
 if __name__ == "__main__":
     unittest.main()

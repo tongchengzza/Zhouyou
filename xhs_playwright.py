@@ -36,3 +36,26 @@ def _parse_cookie(text: str) -> tuple[dict[str, str], list[dict], str]:
     ]
     cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
     return cookie_dict, playwright_cookies, cookie_header
+
+
+def _format(result: dict | None) -> list[dict]:
+    """把 XiaoHongShuClient.get_note_by_keyword 的原始返回拍平成展示行。
+
+    Returns:
+        [{"title": str, "author": str, "likes": str, "url": str}, ...]
+    """
+    if not result or not isinstance(result, dict):
+        return []
+    items = result.get("items") or []
+
+    rows: list[dict] = []
+    for item in items:
+        note = item.get("note_card") or item
+        title = note.get("display_title") or note.get("title") or "（无标题）"
+        author = (note.get("user") or {}).get("nickname") or "未知"
+        likes = (note.get("interact_info") or {}).get("liked_count")
+        likes = str(likes) if likes is not None else "?"
+        note_id = item.get("id") or note.get("note_id") or note.get("id") or ""
+        url = f"https://www.xiaohongshu.com/explore/{note_id}" if note_id else ""
+        rows.append({"title": title, "author": author, "likes": likes, "url": url})
+    return rows
