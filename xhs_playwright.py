@@ -1,44 +1,31 @@
 """小红书 Playwright 搜索 — drama_calendar 项目专用。
 
-集成 MediaCrawler 的 XiaoHongShuClient，通过真实浏览器 + 住宅 IP 绕过风控。
+启动 headless Chromium 访问搜索结果页，让浏览器自身计算 X-S 签名后发起
+/api/sns/web/v1/search/notes，再用 page.expect_response 拦截响应体取结构化
+数据。绕过 MediaCrawler 自构造请求被反爬剥空的问题。
+
 对外只暴露 async search(keyword, page_size)。
 
 部署前提：本机出口 IP 必须是住宅 IP，否则风控仍会拦截。
-依赖：playwright, httpx, parsel, PyExecJS, tenacity, pyhumps, xhshow
+依赖：playwright（含 chromium 二进制和 Linux 系统库）
 """
 from __future__ import annotations
 
 import sys
-import types
 from pathlib import Path
+from urllib.parse import quote
 
 PROJECT_ROOT = Path(__file__).parent
 COOKIE_FILE = PROJECT_ROOT / "小红书Cookie.txt"
-MEDIA_CRAWLER_PATH = PROJECT_ROOT / "vendor" / "MediaCrawler"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
 
-
-def _install_mediacrawler_path() -> None:
-    """让 import 能找到 MediaCrawler 的 client.py / field.py。
-
-    MediaCrawler 的 media_platform/xhs/__init__.py 会 eagerly import
-    XiaoHongShuCrawler，那条路径会拉 redis / aiomysql / proxy_pool 等重依赖。
-    我们只需要 client 和 field，所以预注册空的 package modules 跳过 __init__.py。
-    """
-    if str(MEDIA_CRAWLER_PATH) not in sys.path:
-        sys.path.insert(0, str(MEDIA_CRAWLER_PATH))
-    for pkg_name, pkg_path in [
-        ("media_platform", MEDIA_CRAWLER_PATH / "media_platform"),
-        ("media_platform.xhs", MEDIA_CRAWLER_PATH / "media_platform" / "xhs"),
-    ]:
-        if pkg_name not in sys.modules:
-            mod = types.ModuleType(pkg_name)
-            mod.__path__ = [str(pkg_path)]
-            sys.modules[pkg_name] = mod
+SEARCH_API_FRAGMENT = "/api/sns/web/v1/search/notes"
+PAGE_LOAD_TIMEOUT_MS = 20000
+RESPONSE_WAIT_TIMEOUT_MS = 25000
 
 
 def _parse_cookie(text: str) -> tuple[dict[str, str], list[dict], str]:
@@ -110,7 +97,7 @@ def _friendly_error(stage: str, e: Exception) -> str:
 
 
 async def search(keyword: str, page_size: int = 8) -> list[dict] | str:
-    """用 Playwright + MediaCrawler 在小红书搜索。
+    """启动浏览器访问搜索结果页，拦截 /search/notes 响应取结果。
 
     Returns:
         成功：list[{"title","author","likes","url"}]
@@ -119,31 +106,22 @@ async def search(keyword: str, page_size: int = 8) -> list[dict] | str:
     if not COOKIE_FILE.exists():
         return f"❌ Cookie 文件不存在：{COOKIE_FILE}"
     try:
-        cookie_dict, pw_cookies, cookie_header = _parse_cookie(
-            COOKIE_FILE.read_text(encoding="utf-8")
-        )
+        _, pw_cookies, _ = _parse_cookie(COOKIE_FILE.read_text(encoding="utf-8"))
     except ValueError as e:
         return f"❌ Cookie 解析失败：{e}"
 
     try:
-        from playwright.async_api import async_playwright
+        from playwright.async_api import (
+            async_playwright,
+            TimeoutError as PWTimeout,
+        )
     except ImportError:
         return "❌ 缺依赖：pip install playwright && python3 -m playwright install chromium"
 
-    if not MEDIA_CRAWLER_PATH.exists():
-        return (
-            f"❌ MediaCrawler 不存在：{MEDIA_CRAWLER_PATH}\n"
-            "   请先 git submodule update --init --recursive"
-        )
-    _install_mediacrawler_path()
-    try:
-        from media_platform.xhs.client import XiaoHongShuClient
-        from media_platform.xhs.field import SearchSortType, SearchNoteType
-    except ImportError as e:
-        return (
-            f"❌ MediaCrawler 模块加载失败：{e}\n"
-            "   缺依赖时装：pip install --user parsel PyExecJS tenacity pyhumps xhshow"
-        )
+    search_url = (
+        f"https://www.xiaohongshu.com/search_result?"
+        f"keyword={quote(keyword)}&source=web_explore_feed"
+    )
 
     try:
         async with async_playwright() as p:
@@ -160,54 +138,51 @@ async def search(keyword: str, page_size: int = 8) -> list[dict] | str:
             page = await context.new_page()
 
             try:
-                await page.goto(
-                    "https://www.xiaohongshu.com",
-                    timeout=15000,
-                    wait_until="domcontentloaded",
+                async with page.expect_response(
+                    lambda r: SEARCH_API_FRAGMENT in r.url and r.status == 200,
+                    timeout=RESPONSE_WAIT_TIMEOUT_MS,
+                ) as resp_ctx:
+                    try:
+                        await page.goto(
+                            search_url,
+                            timeout=PAGE_LOAD_TIMEOUT_MS,
+                            wait_until="domcontentloaded",
+                        )
+                    except PWTimeout as e:
+                        await browser.close()
+                        return f"❌ 打开搜索页超时：{e}"
+                resp = await resp_ctx.value
+            except PWTimeout:
+                await browser.close()
+                return (
+                    "❌ 搜索 API 响应超时，浏览器没发出搜索请求。\n"
+                    "   可能 cookie 已失效跳到登录页，请用最新 cookie 覆盖 "
+                    f"{COOKIE_FILE}"
                 )
             except Exception as e:
                 await browser.close()
-                return f"❌ 打开小红书首页失败：{e}"
-
-            client = XiaoHongShuClient(
-                timeout=30,
-                proxy=None,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Cookie": cookie_header,
-                    "Origin": "https://www.xiaohongshu.com",
-                    "Referer": "https://www.xiaohongshu.com/",
-                    "Content-Type": "application/json;charset=UTF-8",
-                },
-                playwright_page=page,
-                cookie_dict=cookie_dict,
-            )
+                return _friendly_error("拦截搜索响应失败", e)
 
             try:
-                if not await client.pong():
-                    await browser.close()
-                    return (
-                        "❌ Cookie 已过期或登录态失效。\n"
-                        f"   重新从浏览器复制 cookie 到 {COOKIE_FILE}"
-                    )
+                payload = await resp.json()
             except Exception as e:
                 await browser.close()
-                return _friendly_error("登录检查失败", e)
-
-            try:
-                result = await client.get_note_by_keyword(
-                    keyword,
-                    page=1,
-                    page_size=page_size,
-                    sort=SearchSortType.GENERAL,
-                    note_type=SearchNoteType.ALL,
-                )
-            except Exception as e:
-                await browser.close()
-                return _friendly_error("搜索接口失败", e)
+                return _friendly_error("解析搜索响应失败", e)
 
             await browser.close()
-            return _format(result)
+
+            if not isinstance(payload, dict):
+                return "❌ 搜索响应不是合法 JSON"
+            code = payload.get("code")
+            if code not in (0, None):
+                msg = payload.get("msg") or payload.get("message") or "未知"
+                if code in (-100, 300011):
+                    return _friendly_error("搜索接口失败", Exception(f"code={code} {msg}"))
+                return f"❌ 搜索接口返回错误：code={code} msg={msg}"
+
+            data = payload.get("data") or payload
+            rows = _format(data)
+            return rows[:page_size]
     except Exception as e:
         return _friendly_error("Playwright 异常", e)
 
