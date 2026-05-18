@@ -1,6 +1,9 @@
+import asyncio
+import os
+import tempfile
 import unittest
 
-from xhs_playwright import _parse_cookie
+from xhs_playwright import _parse_cookie, publish
 
 
 class ParseCookieTest(unittest.TestCase):
@@ -80,6 +83,34 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "（无标题）")
         self.assertEqual(rows[0]["author"], "未知")
         self.assertEqual(rows[0]["likes"], "?")
+
+
+class PublishValidationTest(unittest.TestCase):
+    def test_missing_image_returns_error(self):
+        result = asyncio.run(
+            publish("标题", "正文", ["/nonexistent/path/img.png"])
+        )
+        self.assertIsInstance(result, str)
+        self.assertIn("❌", result)
+        self.assertIn("不存在", result)
+
+    def test_missing_cookie_file_returns_error(self):
+        import xhs_playwright as mod
+        from pathlib import Path
+        original = mod.COOKIE_FILE
+        try:
+            mod.COOKIE_FILE = Path("/nonexistent/cookie.txt")
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                tmp = f.name
+            try:
+                result = asyncio.run(publish("标题", "正文", [tmp]))
+            finally:
+                os.unlink(tmp)
+        finally:
+            mod.COOKIE_FILE = original
+        self.assertIsInstance(result, str)
+        self.assertIn("❌", result)
+        self.assertIn("Cookie", result)
 
 
 if __name__ == "__main__":
