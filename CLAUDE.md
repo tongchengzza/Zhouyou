@@ -17,17 +17,34 @@ poster_*.jpg                # 各剧海报（本地缓存）
 
 ## 每次换新剧的标准流程
 
-### 第一步：搜数据（让 Claude 做）
-需要搜索以下内容，**必须有来源，不能猜**：
-- 剧名、总集数、播出平台
-- 每日更新集数（VIP / SVIP 分开）：从开播日到今天
-- 官方海报图片 URL
+### 第一步：搜数据（用户在终端直接跑，不经过 Claude）
 
-搜索关键词模板：
+**首选数据源（权重最高）：小红书追剧日历博主图 → Claude 多模态识图**
+
+```bash
+# 用户自己在终端运行（Claude Code 里用 ! 前缀），图下载完后再告诉 Claude 路径
+unset ALL_PROXY HTTP_PROXY HTTPS_PROXY all_proxy http_proxy https_proxy
+python3 /home/admin123/drama_calendar/xhs_playwright.py "{剧名} 追剧日历" 5 \
+    --download /tmp/xhs_{剧名}/ --max-per-note 5
 ```
-{剧名} 优酷/爱奇艺/腾讯视频 VIP SVIP 更新时间 每天几集 2026
-{剧名} 官方海报 site:sina.com.cn OR news 2026
+- 此命令**由用户直接执行**，JSON 输出留在终端，不进 Claude 上下文（省 token）
+- 下载完成后，告诉 Claude："图在 `/tmp/xhs_{剧名}/`，请识别日历数据"
+- Claude 用 `Read` 工具逐张看图（多模态识图），交叉对比≥2-3 个博主的日历贴
+- 优先看**赞数高 + 标题含"追剧日历"** 的笔记；忽略月历视图日期错乱的劣质图
+- `xhs_playwright.py` 从 `image_list[*].info_list[WB_DFT].url` 拉高清图（xhscdn，**无需登录态**），webp 自动转 JPG
+
+**搜索关键词模板：**
 ```
+{剧名} 追剧日历                  # 找博主自制日历贴（首选）
+{剧名} {当前日期} 几集 更新       # 找当日实测
+```
+
+**Fallback 数据源（仅在小红书图全是劣质或缺当日数据时用）：**
+- 平台官方追剧日历（官微/官网截图）
+- 新浪/搜狐/网易开播报道（注意：163.com/新浪写的"更新至 X 集"通常是 SVIP 数字，不是 VIP）
+- 数学推算（**不可单独使用，必须有≥1 个图源印证**）
+
+**踩坑案例（2026-05-16 主角）：** 之前只用 sina/163 二手新闻 + 数学推算（"4 集首播+周日休更"），结果首播集数错（实际 VIP=3 不是 4）、节奏错（周日不休更）、5/14 减速没察觉、5/15 SVIP 双时段没察觉。三家小红书博主日历图交叉对比后才修正。**长剧（≥40 集）节奏不规则，必须看图。**
 
 ### 第二步：更新脚本配置
 只改 `drama_calendar.py` 顶部 `DRAMA = {...}` 这一块：
@@ -68,6 +85,20 @@ DRAMA = {
 - 每张图最多 **12 行**，超出自动分页生成 `_1.png` / `_2.png` …
 - 分页图右下角标注页码 `(1/2)`、`(2/2)` 等
 
+### 第二·五步：核验当日集数（必须，不可跳过）
+
+**每次更新 schedule 里 current=True 的行之前，先核实当天是否真的更新、以及实际集数：**
+
+1. **小红书搜索**（优先）：
+   ```
+   mcp__xiaohongshu__search_notes 或 WebSearch:
+   "{剧名} VIP 今天更新" / "{剧名} 5月X日 第几集"
+   ```
+2. **视频平台官方**：直接看腾讯视频/爱奇艺/优酷剧集页的集数列表
+3. **第三方站辅助**（dbku.tv / 欧乐影院）：若显示"完结"须警惕，可能是盗版超点资源
+
+只有确认了当天实际集数，才能将 `current=True` 行的 vip/svip 填为具体集数；否则保持 `"待更新"`。
+
 ### 第三步：生成图片
 ```bash
 python3 /home/admin123/drama_calendar/drama_calendar.py
@@ -107,36 +138,20 @@ python3 /home/admin123/drama_calendar/drama_calendar.py
 
 ## 小红书 MCP 工具
 
-项目配置了专用 MCP 服务器（`xhs_mcp.py`），提供两个工具：
+MCP 服务器（`xhs_mcp.py`）**只保留发布功能**。搜索/下载改走 CLI 直接执行，不经过 Claude。
 
-### `search_xiaohongshu_playwright` — 查询数据【推荐，仅家用机器可用】
-```
-keyword: "{剧名} 追剧日历 VIP SVIP 更新"
-keyword: "{剧名} VIP 几集 更新时间"
-```
-- 用 Playwright 真实浏览器 + 住宅 IP 搜，比 WebSearch 准
-- 返回标题、作者、点赞数和笔记链接
-- **优先点赞数高的博主笔记**，实测准确率高
-- ⚠️ 必须部署在家庭住宅网络环境，机房 IP 一样会被风控
-
-### `search_xiaohongshu` — 查询数据【fallback】
-```
-keyword: "{剧名} 追剧日历 VIP SVIP 更新"
-keyword: "{剧名} VIP 几集 更新时间"
-```
-- 基于 xhs Python 库的 HTTP API + 本地签名
-- ⚠️ 当前 DMIT 机房 IP 下被小红书风控拦截，返回 300011 错误
-- 仅在 Playwright 工具不可用时退而求其次，或仍走 WebSearch：
-  ```
-  搜索关键词：小红书 {剧名} VIP追剧日历 site:xiaohongshu.com
-  或：{剧名} VIP SVIP 更新集数 小红书博主
-  ```
-
-### `publish_xiaohongshu` — 发布日历图
+### `publish_xiaohongshu` — 发布日历图（唯一 MCP 工具）
 ```
 title: "全集X集｜今天更新第X集"
 desc:  （按小红书发布模板填写）
 image_paths: ["/home/admin123/drama_calendar/{剧名}_追剧日历_1.png", ...]
+```
+
+### 搜索 / 下载（CLI，用户直接跑）
+```bash
+# 搜索 + 下载图片，结果留在本地，不进 Claude 上下文
+unset ALL_PROXY HTTP_PROXY HTTPS_PROXY all_proxy http_proxy https_proxy
+python3 xhs_playwright.py "{关键词}" {结果数} --download {输出目录} --max-per-note {每帖图数}
 ```
 
 ### Cookie 更新方法
@@ -173,67 +188,70 @@ image_paths: ["/home/admin123/drama_calendar/{剧名}_追剧日历_1.png", ...]
 - 之后各天 SVIP 一律填 `"待更新"`，直到当天实测确认
 - VIP 若仍可数学唯一推算（剩余集数 ÷ 剩余天数整除），继续填入并在注释说明
 
-**核验方式（每次更新当天执行）：**
+**核验方式（每次生成追剧日历前必须执行，不可跳过）：**
+
+**第一步：小红书实时搜索（最高优先级）**
 ```
-dbku.tv 搜剧名 → 看已上线集数 → 对照 schedule 里的集数是否一致
-欧乐影院 搜剧名 → 交叉确认 SVIP 当前最新集号
+WebSearch 或 mcp__xiaohongshu__search_notes 搜索：
+  "{剧名} 今天更新 第几集"
+  "{剧名} VIP 5月X日"
+  "{剧名} 追剧 更新"
+目标：找到当天博主实测帖，确认 VIP / SVIP 今日实际集数
 ```
+
+**第二步：视频平台官方页面**
+```
+腾讯视频 / 爱奇艺 / 优酷 对应剧集页 → 看集数列表最新一集编号
+注意：平台显示的"最新X集"通常是 SVIP 最高集号，VIP = 该数字 - 1
+```
+
+**第三步：第三方核验（辅助，注意陷阱）**
+```
+dbku.tv 搜剧名 → 看已上线集数
+欧乐影院 搜剧名 → 交叉确认
+⚠️ 警告：dbku.tv / 欧乐影院等第三方站经常提前显示"完结 X 集"
+  → 因为它们抓取的是盗版超点/SVIP 资源，不代表官方 VIP 当前进度
+  → 若第三方显示"已完结"而今日日程显示只到第 X 集，以日程为准，不要改集数
+```
+
+**⚠️ 结论：只有小红书实测帖或平台官方数据才能确认当天集数；第三方站仅供参考。**
 
 ---
 
-## 家用机器部署指南（Playwright 搜索专用）
+## 家用机器部署指南（Playwright CLI 专用）
 
-`search_xiaohongshu_playwright` 工具必须部署在家庭住宅网络环境，否则 IP 仍会被风控（DMIT 上跑也会报 300011）。
+`xhs_playwright.py` 必须在家庭住宅网络环境直接运行，机房 IP 会被风控（300011）。
 
 ### 一次性安装
 
 ```bash
-# 1. clone 项目（不带 cookie 和大文件，cookie 单独拷）
-git clone <仓库地址> ~/drama_calendar
-cd ~/drama_calendar
-# 注：vendor/MediaCrawler submodule 当前未被 search() 调用，可不 init
+# 1. 装 Python 依赖
+pip install --user playwright pillow
 
-# 2. 装 Python 依赖
-pip install --user playwright
-
-# 3. 装 Chromium 浏览器和 Linux 系统库
+# 2. 装 Chromium 浏览器和 Linux 系统库
 python3 -m playwright install chromium
 sudo python3 -m playwright install-deps chromium   # Linux 需要，Mac 不需要
 
-# 4. 把 小红书Cookie.txt 拷到项目根（不进 git）
+# 3. 把 小红书Cookie.txt 拷到项目根（不进 git）
 cp /path/to/your/小红书Cookie.txt ./
 
-# 5. 验证出口 IP 是住宅，且当前 shell 不走代理
+# 4. 验证出口 IP 是住宅，且当前 shell 不走代理
 unset ALL_PROXY HTTP_PROXY HTTPS_PROXY all_proxy http_proxy https_proxy
 curl -s ipinfo.io | grep -E '"ip"|"org"'
 # org 不能是 DMIT/AWS/Alibaba/Tencent 等机房 ASN，必须是住宅 ISP
 
-# 6. 烟雾测试
-python3 xhs_playwright.py "低智商犯罪 VIP" 3
+# 5. 烟雾测试
+python3 xhs_playwright.py "追剧日历 VIP" 3
 # 期望：JSON 数组，≥1 条结果
 ```
 
 ### ⚠️ SOCKS5/HTTP 代理注意
 
-WSL 经 Windows 宿主机走 Clash/V2Ray 等代理时，`ALL_PROXY` / `HTTPS_PROXY` 环境变量会被 Chromium 继承，导致搜索从机房节点出口被风控。跑搜索（CLI 或 MCP）前必须先 `unset` 这几个变量，或在启动 MCP 服务器的 launcher 里清空它们。
-
-### MCP 注册
-
-家用机器上 `.claude/settings.json` 路径要改成本地的，比如：
-```json
-{
-  "mcpServers": {
-    "xiaohongshu": {
-      "command": "python3",
-      "args": ["/home/你的用户名/drama_calendar/xhs_mcp.py"]
-    }
-  }
-}
-```
+WSL 经 Windows 宿主机走 Clash/V2Ray 等代理时，`ALL_PROXY` / `HTTPS_PROXY` 环境变量会被 Chromium 继承，导致出口变成机房 IP 被风控。跑脚本前必须先 `unset` 这几个变量。
 
 ### Cookie 失效时
 
-浏览器 F12 复制 cookie 字符串覆盖 `小红书Cookie.txt`。从 `www.xiaohongshu.com` 或 `creator.xiaohongshu.com` 任意子域复制均可（小红书登录后 SSO 跨子域下发），关键是 `a1`、`web_session`、`webId`、`xsecappid` 这几个 www 域字段都在。
+浏览器 F12 复制 cookie 字符串覆盖 `小红书Cookie.txt`。从 `www.xiaohongshu.com` 或 `creator.xiaohongshu.com` 任意子域复制均可（小红书 SSO 跨子域下发），关键字段：`a1`、`web_session`、`webId`、`xsecappid`。
 
 ### License 说明
 

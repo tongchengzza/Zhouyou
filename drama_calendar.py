@@ -12,51 +12,41 @@ import requests, io, os
 # 配置区 — 每次换剧只改这里
 # ================================================================
 DRAMA = {
-    "title":       "主角",
-    "en_title":    "",
+    "title":       "爱情没有神话",
+    "en_title":    "LOVE HAS NO MYTH",
     "platform":    "腾讯视频",
-    "platform2":   "",
+    "platform2":   "咪咕视频",
     "status":      "热播中",
-    "total_eps":   48,
-    "vip_note":    "每日20:00更新",
+    "total_eps":   37,
+    "vip_note":    "每日19:30更新",
     "svip_note":   "比VIP多看1集",
-    "poster_path": "/home/admin123/drama_calendar/poster_主角.jpg",
+    "poster_path": "/home/admin123/drama_calendar/poster_爱情没有神话.jpg",
     "poster_url":  "",
-    # 腾讯视频全网独播，每日20:00更新，SVIP抢先看1集
-    # 5月10日首播4集（实测）；5月13日断更（实测）；后续每日集数以实测为准，不推算
+    # 数据来源：4/28-5/16 已实播核验（内存记录）；5/17-5/20 数学自洽推算（总集数37，VIP+SVIP各差1集）
     "schedule": [
-        # ── 第一周 5月10-16 ─────────────────────────────────────
-        {"date": "5月10日", "day": "周日", "vip": "第1-4集",   "svip": "第1-5集",   "done": True,  "current": False},  # 首播4集
-        {"date": "5月11日", "day": "周一", "vip": "第5-6集",   "svip": "第6-7集",   "done": True,  "current": False},
-        {"date": "5月12日", "day": "周二", "vip": "第7-8集",   "svip": "第8-9集",   "done": True,  "current": False},
-        {"date": "5月13日", "day": "周三", "done": True,  "current": False, "no_update": True},  # 断更
-        {"date": "5月14日", "day": "周四", "vip": "第9-10集",  "svip": "第10-11集", "done": False, "current": True},  # 实测
-        {"date": "5月15日", "day": "周五", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月16日", "day": "周六", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月17日", "day": "周日", "done": False, "current": False, "no_update": True},
-        # ── 第二周 5月18-24 ─────────────────────────────────────
-        {"date": "5月18日", "day": "周一", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月19日", "day": "周二", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月20日", "day": "周三", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月21日", "day": "周四", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月22日", "day": "周五", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月23日", "day": "周六", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月24日", "day": "周日", "done": False, "current": False, "no_update": True},
-        # ── 第三周 5月25-31 ─────────────────────────────────────
-        {"date": "5月25日", "day": "周一", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月26日", "day": "周二", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月27日", "day": "周三", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月28日", "day": "周四", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月29日", "day": "周五", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月30日", "day": "周六", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "5月31日", "day": "周日", "done": False, "current": False, "no_update": True},
-        # ── 第四周 6月1-6 ───────────────────────────────────────
-        {"date": "6月1日",  "day": "周一", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "6月2日",  "day": "周二", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "6月3日",  "day": "周三", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "6月4日",  "day": "周四", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "6月5日",  "day": "周五", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False},
-        {"date": "6月6日",  "day": "周六", "vip": "待更新",   "svip": "待更新",   "done": False, "current": False, "badge": "大结局"},
+        {"date": "4月28日", "day": "周二", "vip": "第1-3集",   "svip": "第1-4集",   "done": True,  "current": False, "badge": "开播首日"},
+        {"date": "4月29日", "day": "周三", "vip": "第4-5集",   "svip": "第5-6集",   "done": True,  "current": False},
+        {"date": "4月30日", "day": "周四", "vip": "第6-7集",   "svip": "第7-8集",   "done": True,  "current": False},
+        {"date": "5月1日",  "day": "周五", "vip": "第8-9集",   "svip": "第9-10集",  "done": True,  "current": False},
+        {"date": "5月2日",  "day": "周六", "vip": "第10-11集", "svip": "第11-12集", "done": True,  "current": False},
+        {"date": "5月3日",  "day": "周日", "vip": "第12-13集", "svip": "第13-14集", "done": True,  "current": False},
+        {"date": "5月4日",  "day": "周一", "vip": "第14-15集", "svip": "第15-16集", "done": True,  "current": False},
+        {"date": "5月5日",  "day": "周二", "vip": "第16-17集", "svip": "第17-18集", "done": True,  "current": False},
+        {"date": "5月6日",  "day": "周三", "vip": "第18-19集", "svip": "第19-20集", "done": True,  "current": False},
+        {"date": "5月7日",  "day": "周四", "vip": "第20-21集", "svip": "第21-22集", "done": True,  "current": False},
+        {"date": "5月8日",  "day": "周五", "vip": "第22-23集", "svip": "第23-24集", "done": True,  "current": False},
+        {"date": "5月9日",  "day": "周六", "vip": "第24-25集", "svip": "第25-26集", "done": True,  "current": False},
+        {"date": "5月10日", "day": "周日", "vip": "第26-27集", "svip": "第27-28集", "done": True,  "current": False},
+        {"date": "5月11日", "day": "周一", "vip": "第28-29集", "svip": "第29-30集", "done": True,  "current": False},
+        {"date": "5月12日", "day": "周二", "vip": "第30-31集", "svip": "第31-32集", "done": True,  "current": False},
+        {"date": "5月13日", "day": "周三", "vip": "第32集",    "svip": "第33集",    "done": True,  "current": False, "badge": "大结局点映礼"},
+        {"date": "5月14日", "day": "周四", "vip": "",          "svip": "",          "done": True,  "current": False, "no_update": True},
+        {"date": "5月15日", "day": "周五", "vip": "",          "svip": "",          "done": True,  "current": False, "no_update": True},
+        {"date": "5月16日", "day": "周六", "vip": "第33集",    "svip": "第34集",    "done": True,  "current": False, "badge": "央视收官"},
+        {"date": "5月17日", "day": "周日", "vip": "第34集",    "svip": "第35集",    "done": False, "current": True},
+        {"date": "5月18日", "day": "周一", "vip": "第35集",    "svip": "第36集",    "done": False, "current": False},
+        {"date": "5月19日", "day": "周二", "vip": "第36集",    "svip": "第37集",    "done": False, "current": False, "badge": "SVIP大结局"},
+        {"date": "5月20日", "day": "周三", "vip": "第37集",    "svip": "第37集",    "done": False, "current": False, "badge": "大结局"},
     ]
 }
 
