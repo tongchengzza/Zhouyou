@@ -136,16 +136,25 @@ python3 /home/admin123/drama_calendar/drama_calendar.py
 
 ---
 
-## 小红书 MCP 工具
+## 小红书发布（Playwright CLI）
 
-MCP 服务器（`xhs_mcp.py`）**只保留发布功能**。搜索/下载改走 CLI 直接执行，不经过 Claude。
+发布走本地 CLI，不经过 MCP 或 Claude。
 
-### `publish_xiaohongshu` — 发布日历图（唯一 MCP 工具）
+### 发布日历图
+
+```bash
+unset ALL_PROXY HTTP_PROXY HTTPS_PROXY all_proxy http_proxy https_proxy
+python3 /home/admin123/drama_calendar/xhs_playwright.py --publish \
+  --title "全集X集｜今天更新第X集" \
+  --desc "（按小红书发布模板填写正文）" \
+  --images /home/admin123/drama_calendar/{剧名}_追剧日历_1.png \
+           /home/admin123/drama_calendar/{剧名}_追剧日历_2.png
 ```
-title: "全集X集｜今天更新第X集"
-desc:  （按小红书发布模板填写）
-image_paths: ["/home/admin123/drama_calendar/{剧名}_追剧日历_1.png", ...]
-```
+
+输出成功：`{"note_id": "...", "url": "https://www.xiaohongshu.com/explore/..."}`
+
+⚠️ 发布比搜索更敏感，首次建议用测试标题发布一条草稿确认流程正常。  
+遇到选择器失效或验证码问题，参考 skill `xhs-publish-via-playwright`。
 
 ### 搜索 / 下载（CLI，用户直接跑）
 ```bash
